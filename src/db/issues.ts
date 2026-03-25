@@ -2,6 +2,17 @@ import { getDb } from "./schema.js";
 import { NotFoundError, ConflictError } from "./errors.js";
 
 // ---------------------------------------------------------------------------
+// Broadcast hook — set by the API server for live WebSocket updates
+// ---------------------------------------------------------------------------
+
+type BroadcastFn = (type: string, payload: unknown) => void;
+let _broadcast: BroadcastFn | null = null;
+
+export function setBroadcast(fn: BroadcastFn): void {
+  _broadcast = fn;
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -169,7 +180,9 @@ export function updateIssue(id: string, patch: Partial<Issue>): Issue {
     ...values,
   );
 
-  return getIssue(id)!;
+  const updated = getIssue(id)!;
+  _broadcast?.("issue_updated", updated);
+  return updated;
 }
 
 export function deleteIssue(id: string): void {
@@ -204,9 +217,11 @@ export function appendLog(
     )
     .run(issueId, step, type, message);
 
-  return db
+  const log = db
     .prepare("SELECT * FROM logs WHERE id = ?")
     .get(result.lastInsertRowid) as LogEntry;
+  _broadcast?.("log_appended", log);
+  return log;
 }
 
 export function getLogsForIssue(issueId: string): LogEntry[] {
