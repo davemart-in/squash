@@ -29,6 +29,7 @@ async function runAgent(
   });
 
   let resultText = "";
+  let allText = "";
 
   for await (const message of q) {
     const msg = message as any;
@@ -37,6 +38,7 @@ async function runAgent(
       case "assistant": {
         for (const block of msg.message?.content ?? []) {
           if (block.type === "text" && block.text) {
+            allText += block.text + "\n";
             appendLog(issueId, step, "cmd", block.text);
           }
           if (block.type === "tool_use") {
@@ -51,6 +53,7 @@ async function runAgent(
         const name = msg.tool_name ?? "tool";
         const result = msg.result ?? "";
         if (result) {
+          allText += result + "\n";
           const truncated = result.length > 200 ? result.slice(0, 200) + "…" : result;
           appendLog(issueId, step, "dim", `← ${name}: ${truncated}`);
         }
@@ -82,7 +85,7 @@ async function runAgent(
     }
   }
 
-  return resultText;
+  return resultText || allText;
 }
 
 /** Summarize tool input for logging. */
@@ -117,6 +120,9 @@ export async function runAgentForIssue(
   let issue = getIssue(issueId);
   if (!issue) throw new NotFoundError("Issue", issueId);
 
+  const repoPath = process.env.REPO_PATH;
+  if (!repoPath) throw new Error("REPO_PATH is not set — cannot run agent without a target repo");
+
   const startStep = resumeFromStep ?? 3;
 
   if (startStep > 3 && (!issue.worktree_path || !issue.branch)) {
@@ -128,7 +134,7 @@ export async function runAgentForIssue(
       appendLog(issueId, startStep, "ok", `Resuming from step ${startStep}…`);
     }
 
-    let worktreePath = issue.worktree_path ?? path.resolve(`./worktrees/${issueId}`);
+    let worktreePath = issue.worktree_path ?? path.resolve(repoPath, `../worktrees/${issueId}`);
     let branch = issue.branch ?? `fix/${issueId}`;
 
     const agentOpts: Partial<Options> = {
@@ -147,10 +153,10 @@ export async function runAgentForIssue(
       advanceStep(issueId, 3);
       stepLog(issueId, 3, "Creating branch and worktree…");
 
-      worktreePath = path.resolve(`./worktrees/${issueId}`);
+      worktreePath = path.resolve(repoPath, `../worktrees/${issueId}`);
       branch = `fix/${issueId}`;
 
-      execSync(`git worktree add ${worktreePath} -b ${branch}`, {
+      execSync(`git -C ${repoPath} worktree add ${worktreePath} -b ${branch}`, {
         stdio: "pipe",
       });
 

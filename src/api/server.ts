@@ -1,4 +1,5 @@
 import path from "path";
+import { execSync } from "child_process";
 import { fileURLToPath } from "url";
 import express from "express";
 import { createServer } from "http";
@@ -81,6 +82,29 @@ app.post("/api/issues/:id/retry", (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(400).json({ error: message });
+  }
+});
+
+// GET /api/issues/:id/diff — get the git diff for an issue's branch
+app.get("/api/issues/:id/diff", (req, res) => {
+  try {
+    const issue = getIssue(req.params.id);
+    if (!issue) {
+      res.status(404).json({ error: `Issue not found: ${req.params.id}` });
+      return;
+    }
+    if (!issue.worktree_path || !issue.branch) {
+      res.status(400).json({ error: "No worktree or branch for this issue" });
+      return;
+    }
+    const diff = execSync(`git -C ${issue.worktree_path} diff HEAD~1 --no-color`, {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    res.type("text/plain").send(diff);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
   }
 });
 

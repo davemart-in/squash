@@ -104,14 +104,15 @@ export function cancelAndDeleteIssue(issueId: string): void {
     running.delete(issueId);
   }
 
-  // Clean up git worktree and branch
+  // Clean up git worktree and branch in the target repo
   const issue = getIssue(issueId);
-  if (issue) {
+  const repoPath = process.env.REPO_PATH;
+  if (issue && repoPath) {
     if (issue.worktree_path) {
-      try { execSync(`git worktree remove --force ${issue.worktree_path}`, { stdio: "pipe" }); } catch {}
+      try { execSync(`git -C ${repoPath} worktree remove --force ${issue.worktree_path}`, { stdio: "pipe" }); } catch {}
     }
     if (issue.branch) {
-      try { execSync(`git branch -D ${issue.branch}`, { stdio: "pipe" }); } catch {}
+      try { execSync(`git -C ${repoPath} branch -D ${issue.branch}`, { stdio: "pipe" }); } catch {}
     }
   }
 
