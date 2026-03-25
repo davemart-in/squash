@@ -1,7 +1,9 @@
+import { execSync } from "child_process";
 import { v4 as uuidv4 } from "uuid";
 import {
   createIssue,
   getIssue,
+  deleteIssue,
   listIssues,
   type Issue,
   type IssueStatus,
@@ -74,4 +76,26 @@ export function getStatus(issueId: string): Issue {
 
 export function listAll(status?: IssueStatus | IssueStatus[]): Issue[] {
   return listIssues(status);
+}
+
+export function cancelAndDeleteIssue(issueId: string): void {
+  // Abort running agent (best-effort)
+  const controller = running.get(issueId);
+  if (controller) {
+    controller.abort();
+    running.delete(issueId);
+  }
+
+  // Clean up git worktree and branch
+  const issue = getIssue(issueId);
+  if (issue) {
+    if (issue.worktree_path) {
+      try { execSync(`git worktree remove --force ${issue.worktree_path}`, { stdio: "pipe" }); } catch {}
+    }
+    if (issue.branch) {
+      try { execSync(`git branch -D ${issue.branch}`, { stdio: "pipe" }); } catch {}
+    }
+  }
+
+  deleteIssue(issueId);
 }

@@ -4,7 +4,7 @@ import express from "express";
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { getIssue, getLogsForIssue, setBroadcast, type IssueStatus } from "../db/issues.js";
-import { queueIssue, getStatus, listAll } from "../agents/orchestrator.js";
+import { queueIssue, getStatus, listAll, cancelAndDeleteIssue } from "../agents/orchestrator.js";
 
 // ---------------------------------------------------------------------------
 // Express app
@@ -70,6 +70,17 @@ app.get("/api/issues/:id/logs", (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: message });
+  }
+});
+
+// DELETE /api/issues/:id — cancel and delete an issue
+app.delete("/api/issues/:id", (req, res) => {
+  try {
+    cancelAndDeleteIssue(req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(404).json({ error: message });
   }
 });
 

@@ -194,6 +194,7 @@ export function deleteIssue(id: string): void {
   db.prepare("DELETE FROM logs WHERE issue_id = ?").run(id);
   db.prepare("DELETE FROM agent_runs WHERE issue_id = ?").run(id);
   db.prepare("DELETE FROM issues WHERE id = ?").run(id);
+  _broadcast?.("issue_deleted", { id });
 }
 
 // ---------------------------------------------------------------------------
