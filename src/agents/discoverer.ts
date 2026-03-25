@@ -50,7 +50,7 @@ export async function discoverFromGitHub(
   const { owner, repo } = parseGitHubRepoUrl(repoUrl);
 
   const res = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/issues?state=open&per_page=25&page=${page}&sort=created&direction=desc`,
+    `https://api.github.com/repos/${owner}/${repo}/issues?state=open&assignee=none&per_page=25&page=${page}&sort=created&direction=desc`,
     {
       headers: {
         Authorization: `token ${token}`,
@@ -125,7 +125,8 @@ export async function discoverFromLinear(
       issues(
         filter: {
           team: { key: { eq: $teamKey } }
-          state: { type: { nin: ["completed", "canceled"] } }
+          state: { type: { in: ["backlog", "unstarted"] } }
+          assignee: { null: true }
         }
         first: 25
         after: $cursor
