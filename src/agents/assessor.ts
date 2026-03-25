@@ -78,7 +78,14 @@ export async function assessIssue(issueId: string): Promise<AssessmentResult> {
     .map((block) => block.text)
     .join("");
 
-  const result: AssessmentResult = JSON.parse(text);
+  // Strip markdown code fences if the model wraps the JSON
+  const jsonStr = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/, "").trim();
+  let result: AssessmentResult;
+  try {
+    result = JSON.parse(jsonStr) as AssessmentResult;
+  } catch {
+    throw new Error(`Assessor returned non-JSON response: ${text.slice(0, 200)}`);
+  }
 
   // Persist to DB
   updateIssue(issueId, { complexity_score: result.complexity_score });

@@ -40,11 +40,11 @@ function parseIssueUrl(url: string): { source: "github" | "linear"; ref: string 
 // Public API
 // ---------------------------------------------------------------------------
 
-export async function queueIssue(url: string): Promise<Issue> {
+export async function queueIssue(url: string, context?: string): Promise<Issue> {
   const { source, ref } = parseIssueUrl(url);
   const id = uuidv4();
 
-  const issue = createIssue({ id, ref, source, url });
+  const issue = createIssue({ id, ref, source, url, context: context || null });
 
   // Step 1 — Fetch
   await fetchAndEnrichIssue(id);

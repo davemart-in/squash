@@ -30,6 +30,7 @@ export function getDb(): Database.Database {
       worktree_path TEXT,
       complexity_score INTEGER,
       skip_reason TEXT,
+      context TEXT,
       error_message TEXT,
       started_at TEXT,
       completed_at TEXT,
