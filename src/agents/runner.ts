@@ -16,7 +16,7 @@ function advanceStep(issueId: string, step: number): void {
   updateIssue(issueId, { current_step: step as any });
 }
 
-/** Run a query() call, stream assistant text blocks to the log, return the result text. */
+/** Run a query() call, stream all activity to the log, return the result text. */
 async function runAgent(
   issueId: string,
   step: number,
@@ -31,26 +31,79 @@ async function runAgent(
   let resultText = "";
 
   for await (const message of q) {
-    if (message.type === "assistant") {
-      for (const block of (message as any).message.content) {
-        if (block.type === "text" && block.text) {
-          appendLog(issueId, step, "cmd", block.text);
-        }
-      }
-    }
+    const msg = message as any;
 
-    if (message.type === "result") {
-      const result = message as any;
-      if (result.subtype === "success") {
-        resultText = result.result ?? "";
-      } else {
-        const errors = (result.errors ?? []).join("; ");
-        throw new Error(`Agent failed (${result.subtype}): ${errors}`);
+    switch (message.type) {
+      case "assistant": {
+        for (const block of msg.message?.content ?? []) {
+          if (block.type === "text" && block.text) {
+            appendLog(issueId, step, "cmd", block.text);
+          }
+          if (block.type === "tool_use") {
+            const inputSummary = summarizeToolInput(block.name, block.input);
+            appendLog(issueId, step, "dim", `→ ${block.name}${inputSummary}`);
+          }
+        }
+        break;
+      }
+
+      case "tool_use_summary": {
+        const name = msg.tool_name ?? "tool";
+        const result = msg.result ?? "";
+        if (result) {
+          const truncated = result.length > 200 ? result.slice(0, 200) + "…" : result;
+          appendLog(issueId, step, "dim", `← ${name}: ${truncated}`);
+        }
+        break;
+      }
+
+      case "tool_progress": {
+        const name = msg.tool_name ?? "tool";
+        appendLog(issueId, step, "dim", `⋯ ${name} (${Math.round(msg.elapsed_time_seconds ?? 0)}s)`);
+        break;
+      }
+
+      case "system": {
+        const text = msg.message ?? msg.content ?? "";
+        if (text) appendLog(issueId, step, "dim", text);
+        break;
+      }
+
+      case "result": {
+        if (msg.subtype === "success") {
+          resultText = msg.result ?? "";
+          appendLog(issueId, step, "ok", `Done (${msg.num_turns} turns, $${(msg.total_cost_usd ?? 0).toFixed(3)})`);
+        } else {
+          const errors = (msg.errors ?? []).join("; ");
+          throw new Error(`Agent failed (${msg.subtype}): ${errors}`);
+        }
+        break;
       }
     }
   }
 
   return resultText;
+}
+
+/** Summarize tool input for logging. */
+function summarizeToolInput(tool: string, input: any): string {
+  if (!input) return "";
+  switch (tool) {
+    case "Read":
+      return ` ${input.file_path ?? ""}`;
+    case "Write":
+      return ` ${input.file_path ?? ""}`;
+    case "Edit":
+      return ` ${input.file_path ?? ""}`;
+    case "Bash":
+      return ` ${(input.command ?? "").slice(0, 120)}`;
+    case "Grep":
+      return ` "${input.pattern ?? ""}"${input.path ? ` in ${input.path}` : ""}`;
+    case "Glob":
+      return ` ${input.pattern ?? ""}`;
+    default:
+      return "";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +140,8 @@ export async function runAgentForIssue(issueId: string): Promise<void> {
     const agentOpts: Partial<Options> = {
       cwd: worktreePath,
       allowedTools: ["Read", "Edit", "Write", "Bash"],
-      permissionMode: "acceptEdits",
+      permissionMode: "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
       maxTurns: 30,
       maxBudgetUsd: 3.0,
     };
@@ -106,6 +160,9 @@ export async function runAgentForIssue(issueId: string): Promise<void> {
       `2. Form a plan for the fix.`,
       `3. Implement the fix.`,
       `4. Commit your changes with a descriptive commit message.`,
+      ``,
+      `IMPORTANT: Stop after committing. Do NOT verify, review, diff, push, or amend.`,
+      `A separate review step will handle that.`,
     ].join("\n");
 
     await runAgent(issueId, 4, fixPrompt, agentOpts);
@@ -123,13 +180,12 @@ export async function runAgentForIssue(issueId: string): Promise<void> {
     const prBody = `Fixes ${issue.ref}`;
 
     const prPrompt = [
-      `Run this exact shell command and return the output:`,
+      `Run these shell commands in order:`,
       ``,
-      "```",
-      `gh pr create --draft --title "${prTitle.replace(/"/g, '\\"')}" --body "${prBody.replace(/"/g, '\\"')}"`,
-      "```",
+      `1. git push -u origin ${branch}`,
+      `2. gh pr create --draft --title "${prTitle.replace(/"/g, '\\"')}" --body "${prBody.replace(/"/g, '\\"')}"`,
       ``,
-      `Return only the PR URL from the output.`,
+      `Return only the PR URL from the output. Do nothing else.`,
     ].join("\n");
 
     const prOutput = await runAgent(issueId, 6, prPrompt, {
@@ -163,10 +219,13 @@ export async function runAgentForIssue(issueId: string): Promise<void> {
       prUrl ? `PR: ${prUrl}` : "",
       ``,
       `Instructions:`,
-      `1. Review the diff for code complexity, consistency, and security issues.`,
-      `2. Fix anything you find.`,
-      `3. If you made changes, amend the commit and force-push.`,
-      `4. Summarize what you reviewed and any changes you made.`,
+      `1. Run "git diff HEAD~1" to review your changes.`,
+      `2. Check for code complexity, consistency, and security issues.`,
+      `3. If you find problems, fix them, amend the commit, and force-push.`,
+      `4. If everything looks good, do nothing.`,
+      `5. Summarize what you reviewed and any changes you made.`,
+      ``,
+      `Be concise. Do not re-read the entire codebase.`,
     ]
       .filter(Boolean)
       .join("\n");
