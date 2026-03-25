@@ -1,3 +1,4 @@
+import path from "path";
 import express from "express";
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
@@ -72,6 +73,18 @@ app.get("/api/issues/:id/logs", (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Static frontend (production)
+// ---------------------------------------------------------------------------
+
+const publicDir = path.resolve(import.meta.dirname, "public");
+app.use(express.static(publicDir));
+app.get("*", (_req, res, next) => {
+  // Only serve index.html for non-API routes (SPA fallback)
+  if (_req.path.startsWith("/api")) return next();
+  res.sendFile(path.join(publicDir, "index.html"));
+});
+
+// ---------------------------------------------------------------------------
 // HTTP + WebSocket server
 // ---------------------------------------------------------------------------
 
@@ -101,10 +114,11 @@ setBroadcast(broadcastUpdate);
 // Start
 // ---------------------------------------------------------------------------
 
-const PORT = parseInt(process.env.PORT ?? "3001", 10);
-
-server.listen(PORT, () => {
-  console.log(`squash: API server listening on http://localhost:${PORT}`);
-});
+export function startServer(): void {
+  const PORT = parseInt(process.env.PORT ?? "3001", 10);
+  server.listen(PORT, () => {
+    console.log(`squash: API server listening on http://localhost:${PORT}`);
+  });
+}
 
 export { app, server, broadcastUpdate };

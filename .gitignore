@@ -1,5 +1,6 @@
 node_modules/
 dist/
+src/api/public/
 worktrees/
 *.db
 *.db-wal
