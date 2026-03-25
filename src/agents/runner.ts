@@ -209,21 +209,41 @@ export async function runAgentForIssue(
 
       issue = getIssue(issueId)!;
       const prTitle = `fix: ${issue.title ?? issueId}`;
-      const prBody = `Fixes ${issue.ref}`;
 
       const prPrompt = [
-        `Run these shell commands in order:`,
+        `Create a draft pull request for the changes you just made.`,
         ``,
-        `1. git push -u origin ${branch}`,
-        `2. gh pr create --draft --title "${prTitle.replace(/"/g, '\\"')}" --body "${prBody.replace(/"/g, '\\"')}"`,
+        `1. First, run: git push -u origin ${branch}`,
+        `2. Then run: git diff HEAD~1 --stat`,
+        `3. Then create the PR using gh pr create with the details below.`,
         ``,
-        `Return only the PR URL from the output. Do nothing else.`,
+        `Title: ${prTitle}`,
+        ``,
+        `Write the PR body in this exact format (using a heredoc with gh pr create):`,
+        ``,
+        `## Description`,
+        `A clear explanation of what the issue was and what this PR does to fix it.`,
+        ``,
+        `## Changes`,
+        `- Bullet list of each file changed and why`,
+        ``,
+        `## Before / After`,
+        `Explain the behavior before and after this change.`,
+        ``,
+        `## Testing`,
+        `Step-by-step instructions for how to verify this fix works.`,
+        ``,
+        `---`,
+        `Fixes ${issue.ref}`,
+        ``,
+        `Pass the body via a heredoc to preserve formatting. Use --draft flag.`,
+        `Return only the PR URL from the output. Do nothing else after creating the PR.`,
       ].join("\n");
 
       const prOutput = await runAgent(issueId, 6, prPrompt, {
         ...agentOpts,
-        maxTurns: 5,
-        maxBudgetUsd: 0.5,
+        maxTurns: 10,
+        maxBudgetUsd: 1.0,
       });
 
       const prUrlMatch = prOutput.match(
