@@ -156,6 +156,10 @@ export async function runAgentForIssue(
       worktreePath = path.resolve(repoPath, `../worktrees/${issueId}`);
       branch = `fix/${issueId}`;
 
+      // Clean up stale worktree/branch if they exist from a previous run
+      try { execSync(`git -C ${repoPath} worktree remove --force ${worktreePath}`, { stdio: "pipe" }); } catch {}
+      try { execSync(`git -C ${repoPath} branch -D ${branch}`, { stdio: "pipe" }); } catch {}
+
       // Fetch latest and detect the default branch
       execSync(`git -C ${repoPath} fetch origin`, { stdio: "pipe" });
       const defaultBranch = execSync(
