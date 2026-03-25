@@ -156,9 +156,18 @@ export async function runAgentForIssue(
       worktreePath = path.resolve(repoPath, `../worktrees/${issueId}`);
       branch = `fix/${issueId}`;
 
-      execSync(`git -C ${repoPath} worktree add ${worktreePath} -b ${branch}`, {
-        stdio: "pipe",
-      });
+      // Fetch latest and detect the default branch
+      execSync(`git -C ${repoPath} fetch origin`, { stdio: "pipe" });
+      const defaultBranch = execSync(
+        `git -C ${repoPath} rev-parse --abbrev-ref origin/HEAD`,
+        { encoding: "utf-8", stdio: "pipe" },
+      ).trim(); // e.g. "origin/trunk" or "origin/main"
+
+      execSync(
+        `git -C ${repoPath} worktree add ${worktreePath} -b ${branch} ${defaultBranch}`,
+        { stdio: "pipe" },
+      );
+      appendLog(issueId, 3, "dim", `Branched from ${defaultBranch}`);
 
       updateIssue(issueId, { branch, worktree_path: worktreePath });
       agentOpts.cwd = worktreePath;
