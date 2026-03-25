@@ -84,12 +84,22 @@ export function retryIssue(issueId: string): Issue {
   if (!issue) throw new Error(`Issue not found: ${issueId}`);
   if (running.has(issueId)) throw new Error("Issue is already running");
 
+  // If the worktree is gone, restart from step 3
+  let resumeStep = issue.current_step;
+  if (resumeStep > 3 && issue.worktree_path) {
+    try {
+      execSync(`test -d ${issue.worktree_path}`, { stdio: "pipe" });
+    } catch {
+      resumeStep = 3;
+    }
+  }
+
   updateIssue(issueId, { status: "running", error_message: null });
 
   const controller = new AbortController();
   running.set(issueId, controller);
 
-  runAgentForIssue(issueId, issue.current_step).finally(() => {
+  runAgentForIssue(issueId, resumeStep).finally(() => {
     running.delete(issueId);
   });
 
