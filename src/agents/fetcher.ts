@@ -75,7 +75,7 @@ interface LinearResponse {
     issue: {
       title: string;
       description: string | null;
-      labelNames: string[];
+      labels: { nodes: Array<{ name: string }> };
       assignee: { name: string } | null;
     } | null;
   };
@@ -98,7 +98,7 @@ async function fetchLinear(url: string): Promise<{
       issue(id: $id) {
         title
         description
-        labelNames
+        labels { nodes { name } }
         assignee { name }
       }
     }
@@ -132,7 +132,7 @@ async function fetchLinear(url: string): Promise<{
   return {
     title: issue.title,
     body: issue.description,
-    labels: issue.labelNames ?? [],
+    labels: issue.labels.nodes.map((l) => l.name),
     assignee: issue.assignee?.name ?? null,
   };
 }

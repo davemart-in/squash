@@ -16,12 +16,12 @@ app.use(express.json());
 // POST /api/issues — queue a new issue
 app.post("/api/issues", async (req, res) => {
   try {
-    const { url } = req.body;
+    const { url, context } = req.body;
     if (!url || typeof url !== "string") {
       res.status(400).json({ error: "Missing or invalid 'url' in request body" });
       return;
     }
-    const issue = await queueIssue(url);
+    const issue = await queueIssue(url, context);
     res.status(201).json(issue);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

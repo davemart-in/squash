@@ -99,6 +99,7 @@ export async function runAgentForIssue(issueId: string): Promise<void> {
       ``,
       `**Issue body:**`,
       issue.body ?? "(no body)",
+      ...(issue.context ? [``, `**Additional context:**`, issue.context] : []),
       ``,
       `Instructions:`,
       `1. Browse the codebase to understand the relevant code.`,

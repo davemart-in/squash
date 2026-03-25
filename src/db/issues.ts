@@ -43,6 +43,7 @@ export interface Issue {
   worktree_path: string | null;
   complexity_score: number | null;
   skip_reason: string | null;
+  context: string | null;
   error_message: string | null;
   started_at: string | null;
   completed_at: string | null;
@@ -93,6 +94,7 @@ interface IssueRow {
   worktree_path: string | null;
   complexity_score: number | null;
   skip_reason: string | null;
+  context: string | null;
   error_message: string | null;
   started_at: string | null;
   completed_at: string | null;
@@ -112,7 +114,7 @@ function rowToIssue(row: IssueRow): Issue {
 // ---------------------------------------------------------------------------
 
 export function createIssue(
-  data: Pick<Issue, "id" | "ref" | "source" | "url">,
+  data: Pick<Issue, "id" | "ref" | "source" | "url"> & { context?: string | null },
 ): Issue {
   const db = getDb();
 
@@ -122,8 +124,8 @@ export function createIssue(
   if (existing) throw new ConflictError("Issue", data.id);
 
   db.prepare(
-    "INSERT INTO issues (id, ref, source, url) VALUES (?, ?, ?, ?)",
-  ).run(data.id, data.ref, data.source, data.url);
+    "INSERT INTO issues (id, ref, source, url, context) VALUES (?, ?, ?, ?, ?)",
+  ).run(data.id, data.ref, data.source, data.url, data.context ?? null);
 
   return getIssue(data.id)!;
 }
