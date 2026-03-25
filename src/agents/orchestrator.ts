@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import {
   createIssue,
   getIssue,
+  updateIssue,
   deleteIssue,
   listIssues,
   type Issue,
@@ -76,6 +77,23 @@ export function getStatus(issueId: string): Issue {
 
 export function listAll(status?: IssueStatus | IssueStatus[]): Issue[] {
   return listIssues(status);
+}
+
+export function retryIssue(issueId: string): Issue {
+  const issue = getIssue(issueId);
+  if (!issue) throw new Error(`Issue not found: ${issueId}`);
+  if (running.has(issueId)) throw new Error("Issue is already running");
+
+  updateIssue(issueId, { status: "running", error_message: null });
+
+  const controller = new AbortController();
+  running.set(issueId, controller);
+
+  runAgentForIssue(issueId, issue.current_step).finally(() => {
+    running.delete(issueId);
+  });
+
+  return getIssue(issueId)!;
 }
 
 export function cancelAndDeleteIssue(issueId: string): void {

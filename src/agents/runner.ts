@@ -110,32 +110,26 @@ function summarizeToolInput(tool: string, input: any): string {
 // Public API
 // ---------------------------------------------------------------------------
 
-export async function runAgentForIssue(issueId: string): Promise<void> {
-  const issue = getIssue(issueId);
+export async function runAgentForIssue(
+  issueId: string,
+  resumeFromStep?: number,
+): Promise<void> {
+  let issue = getIssue(issueId);
   if (!issue) throw new NotFoundError("Issue", issueId);
 
+  const startStep = resumeFromStep ?? 3;
+
+  if (startStep > 3 && (!issue.worktree_path || !issue.branch)) {
+    throw new Error("Cannot resume: missing worktree or branch on issue record");
+  }
+
   try {
-    // ------------------------------------------------------------------
-    // Step 3 — Branch + worktree
-    // ------------------------------------------------------------------
-    advanceStep(issueId, 3);
-    stepLog(issueId, 3, "Creating branch and worktree…");
+    if (startStep > 3) {
+      appendLog(issueId, startStep, "ok", `Resuming from step ${startStep}…`);
+    }
 
-    const worktreePath = path.resolve(`./worktrees/${issueId}`);
-    const branch = `fix/${issueId}`;
-
-    execSync(`git worktree add ${worktreePath} -b ${branch}`, {
-      stdio: "pipe",
-    });
-
-    updateIssue(issueId, { branch, worktree_path: worktreePath });
-    appendLog(issueId, 3, "ok", `Created worktree at ${worktreePath} on branch ${branch}`);
-
-    // ------------------------------------------------------------------
-    // Steps 4-5 — Plan and fix
-    // ------------------------------------------------------------------
-    advanceStep(issueId, 4);
-    stepLog(issueId, 4, "Planning and implementing fix…");
+    let worktreePath = issue.worktree_path ?? path.resolve(`./worktrees/${issueId}`);
+    let branch = issue.branch ?? `fix/${issueId}`;
 
     const agentOpts: Partial<Options> = {
       cwd: worktreePath,
@@ -146,95 +140,131 @@ export async function runAgentForIssue(issueId: string): Promise<void> {
       maxBudgetUsd: 3.0,
     };
 
-    const fixPrompt = [
-      `You are fixing a bug in this codebase.`,
-      ``,
-      `**Issue title:** ${issue.title}`,
-      ``,
-      `**Issue body:**`,
-      issue.body ?? "(no body)",
-      ...(issue.context ? [``, `**Additional context:**`, issue.context] : []),
-      ``,
-      `Instructions:`,
-      `1. Browse the codebase to understand the relevant code.`,
-      `2. Form a plan for the fix.`,
-      `3. Implement the fix.`,
-      `4. Commit your changes with a descriptive commit message.`,
-      ``,
-      `IMPORTANT: Stop after committing. Do NOT verify, review, diff, push, or amend.`,
-      `A separate review step will handle that.`,
-    ].join("\n");
+    // ------------------------------------------------------------------
+    // Step 3 — Branch + worktree
+    // ------------------------------------------------------------------
+    if (startStep <= 3) {
+      advanceStep(issueId, 3);
+      stepLog(issueId, 3, "Creating branch and worktree…");
 
-    await runAgent(issueId, 4, fixPrompt, agentOpts);
+      worktreePath = path.resolve(`./worktrees/${issueId}`);
+      branch = `fix/${issueId}`;
 
-    advanceStep(issueId, 5);
-    appendLog(issueId, 5, "ok", "Fix implemented and committed");
+      execSync(`git worktree add ${worktreePath} -b ${branch}`, {
+        stdio: "pipe",
+      });
+
+      updateIssue(issueId, { branch, worktree_path: worktreePath });
+      agentOpts.cwd = worktreePath;
+      appendLog(issueId, 3, "ok", `Created worktree at ${worktreePath} on branch ${branch}`);
+    }
+
+    // ------------------------------------------------------------------
+    // Steps 4-5 — Plan and fix
+    // ------------------------------------------------------------------
+    if (startStep <= 5) {
+      advanceStep(issueId, 4);
+      stepLog(issueId, 4, "Planning and implementing fix…");
+
+      // Re-read issue in case it was updated
+      issue = getIssue(issueId)!;
+
+      const fixPrompt = [
+        `You are fixing a bug in this codebase.`,
+        ``,
+        `**Issue title:** ${issue.title}`,
+        ``,
+        `**Issue body:**`,
+        issue.body ?? "(no body)",
+        ...(issue.context ? [``, `**Additional context:**`, issue.context] : []),
+        ``,
+        `Instructions:`,
+        `1. Browse the codebase to understand the relevant code.`,
+        `2. Form a plan for the fix.`,
+        `3. Implement the fix.`,
+        `4. Commit your changes with a descriptive commit message.`,
+        ``,
+        `IMPORTANT: Stop after committing. Do NOT verify, review, diff, push, or amend.`,
+        `A separate review step will handle that.`,
+      ].join("\n");
+
+      await runAgent(issueId, 4, fixPrompt, agentOpts);
+
+      advanceStep(issueId, 5);
+      appendLog(issueId, 5, "ok", "Fix implemented and committed");
+    }
 
     // ------------------------------------------------------------------
     // Step 6 — Create draft PR
     // ------------------------------------------------------------------
-    advanceStep(issueId, 6);
-    stepLog(issueId, 6, "Creating draft PR…");
+    if (startStep <= 6) {
+      advanceStep(issueId, 6);
+      stepLog(issueId, 6, "Creating draft PR…");
 
-    const prTitle = `fix: ${issue.title ?? issueId}`;
-    const prBody = `Fixes ${issue.ref}`;
+      issue = getIssue(issueId)!;
+      const prTitle = `fix: ${issue.title ?? issueId}`;
+      const prBody = `Fixes ${issue.ref}`;
 
-    const prPrompt = [
-      `Run these shell commands in order:`,
-      ``,
-      `1. git push -u origin ${branch}`,
-      `2. gh pr create --draft --title "${prTitle.replace(/"/g, '\\"')}" --body "${prBody.replace(/"/g, '\\"')}"`,
-      ``,
-      `Return only the PR URL from the output. Do nothing else.`,
-    ].join("\n");
+      const prPrompt = [
+        `Run these shell commands in order:`,
+        ``,
+        `1. git push -u origin ${branch}`,
+        `2. gh pr create --draft --title "${prTitle.replace(/"/g, '\\"')}" --body "${prBody.replace(/"/g, '\\"')}"`,
+        ``,
+        `Return only the PR URL from the output. Do nothing else.`,
+      ].join("\n");
 
-    const prOutput = await runAgent(issueId, 6, prPrompt, {
-      ...agentOpts,
-      maxTurns: 5,
-      maxBudgetUsd: 0.5,
-    });
+      const prOutput = await runAgent(issueId, 6, prPrompt, {
+        ...agentOpts,
+        maxTurns: 5,
+        maxBudgetUsd: 0.5,
+      });
 
-    // Parse PR URL from agent output
-    const prUrlMatch = prOutput.match(
-      /https:\/\/github\.com\/[^\s)]+\/pull\/\d+/,
-    );
-    const prUrl = prUrlMatch?.[0] ?? null;
-    const prNumber = prUrl?.match(/\/pull\/(\d+)/)?.[1] ?? null;
+      const prUrlMatch = prOutput.match(
+        /https:\/\/github\.com\/[^\s)]+\/pull\/\d+/,
+      );
+      const prUrl = prUrlMatch?.[0] ?? null;
+      const prNumber = prUrl?.match(/\/pull\/(\d+)/)?.[1] ?? null;
 
-    updateIssue(issueId, {
-      pr_url: prUrl,
-      pr_number: prNumber,
-      status: "running",
-    });
-    advanceStep(issueId, 7);
-    appendLog(issueId, 6, "ok", `Draft PR created: ${prUrl ?? "(URL not parsed)"}`);
+      updateIssue(issueId, {
+        pr_url: prUrl,
+        pr_number: prNumber,
+        status: "running",
+      });
+      advanceStep(issueId, 7);
+      appendLog(issueId, 6, "ok", `Draft PR created: ${prUrl ?? "(URL not parsed)"}`);
+    }
 
     // ------------------------------------------------------------------
     // Steps 7-8 — Review and fix
     // ------------------------------------------------------------------
-    stepLog(issueId, 7, "Reviewing diff…");
+    if (startStep <= 7) {
+      stepLog(issueId, 7, "Reviewing diff…");
 
-    const reviewPrompt = [
-      `You are reviewing a pull request you just created.`,
-      prUrl ? `PR: ${prUrl}` : "",
-      ``,
-      `Instructions:`,
-      `1. Run "git diff HEAD~1" to review your changes.`,
-      `2. Check for code complexity, consistency, and security issues.`,
-      `3. If you find problems, fix them, amend the commit, and force-push.`,
-      `4. If everything looks good, do nothing.`,
-      `5. Summarize what you reviewed and any changes you made.`,
-      ``,
-      `Be concise. Do not re-read the entire codebase.`,
-    ]
-      .filter(Boolean)
-      .join("\n");
+      issue = getIssue(issueId)!;
 
-    await runAgent(issueId, 7, reviewPrompt, {
-      ...agentOpts,
-      maxTurns: 20,
-      maxBudgetUsd: 2.0,
-    });
+      const reviewPrompt = [
+        `You are reviewing a pull request you just created.`,
+        issue.pr_url ? `PR: ${issue.pr_url}` : "",
+        ``,
+        `Instructions:`,
+        `1. Run "git diff HEAD~1" to review your changes.`,
+        `2. Check for code complexity, consistency, and security issues.`,
+        `3. If you find problems, fix them, amend the commit, and force-push.`,
+        `4. If everything looks good, do nothing.`,
+        `5. Summarize what you reviewed and any changes you made.`,
+        ``,
+        `Be concise. Do not re-read the entire codebase.`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      await runAgent(issueId, 7, reviewPrompt, {
+        ...agentOpts,
+        maxTurns: 20,
+        maxBudgetUsd: 2.0,
+      });
+    }
 
     advanceStep(issueId, 8);
     updateIssue(issueId, { status: "needs-review" });
