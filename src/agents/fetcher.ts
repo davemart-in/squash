@@ -107,7 +107,7 @@ async function fetchLinear(url: string): Promise<{
   const res = await fetch("https://api.linear.app/graphql", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: token,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ query, variables: { id: identifier } }),

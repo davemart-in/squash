@@ -1,4 +1,5 @@
 import path from "path";
+import { fileURLToPath } from "url";
 import express from "express";
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
@@ -76,9 +77,10 @@ app.get("/api/issues/:id/logs", (req, res) => {
 // Static frontend (production)
 // ---------------------------------------------------------------------------
 
-const publicDir = path.resolve(import.meta.dirname, "public");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const publicDir = path.resolve(__dirname, "public");
 app.use(express.static(publicDir));
-app.get("*", (_req, res, next) => {
+app.get("*splat", (_req, res, next) => {
   // Only serve index.html for non-API routes (SPA fallback)
   if (_req.path.startsWith("/api")) return next();
   res.sendFile(path.join(publicDir, "index.html"));

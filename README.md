@@ -47,7 +47,7 @@ npm run build
 npm start
 ```
 
-The `build` command compiles the React frontend into `src/api/public/`. The `start` command runs the compiled server, which serves both the API and the static frontend on a single port.
+The `build` command compiles the React frontend into `src/api/public/`. The `start` command runs the server, which serves both the API and the static frontend on a single port.
 
 ### Reset the database
 

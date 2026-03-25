@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently -n api,ui -c blue,magenta \"tsx watch src/index.ts\" \"cd src/ui && npx vite dev\"",
     "build": "cd src/ui && npx vite build --outDir ../../src/api/public --emptyOutDir",
-    "start": "node dist/index.js",
+    "start": "tsx src/index.ts",
     "db:reset": "rm -f squash.db && tsx -e \"import './src/db/schema.js'\" && echo 'squash: database reset'",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
