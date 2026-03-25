@@ -6,6 +6,7 @@ import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { getIssue, getLogsForIssue, setBroadcast, type IssueStatus } from "../db/issues.js";
 import { queueIssue, getStatus, listAll, retryIssue, completeIssue, cancelAndDeleteIssue } from "../agents/orchestrator.js";
+import { discoverFromGitHub, discoverFromLinear, discoverAndAssess } from "../agents/discoverer.js";
 
 // ---------------------------------------------------------------------------
 // Express app
@@ -68,6 +69,51 @@ app.get("/api/issues/:id/logs", (req, res) => {
       return;
     }
     res.json(getLogsForIssue(req.params.id));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/discover — find fixable issues from a repo or team
+app.post("/api/discover", async (req, res) => {
+  try {
+    const { url, page, cursor } = req.body;
+    if (!url || typeof url !== "string") {
+      res.status(400).json({ error: "Missing or invalid 'url' in request body" });
+      return;
+    }
+
+    const isGitHub = url.includes("github.com");
+    const isLinear = url.includes("linear.app");
+
+    if (!isGitHub && !isLinear) {
+      res.status(400).json({ error: "URL must be a GitHub repo or Linear team URL" });
+      return;
+    }
+
+    let rawIssues;
+    let nextPage: number | undefined;
+    let nextCursor: string | undefined;
+
+    if (isGitHub) {
+      rawIssues = await discoverFromGitHub(url, page ?? 1);
+      if (rawIssues.length === 25) nextPage = (page ?? 1) + 1;
+    } else {
+      const result = await discoverFromLinear(url, cursor);
+      rawIssues = result.issues;
+      nextCursor = result.nextCursor ?? undefined;
+    }
+
+    const allAssessed = await discoverAndAssess(rawIssues);
+    const fixable = allAssessed.filter((i) => i.should_attempt);
+
+    res.json({
+      issues: fixable,
+      all_count: rawIssues.length,
+      nextPage,
+      nextCursor,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: message });

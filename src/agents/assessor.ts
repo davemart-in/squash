@@ -6,7 +6,7 @@ import { NotFoundError } from "../db/errors.js";
 // Types
 // ---------------------------------------------------------------------------
 
-interface AssessmentResult {
+export interface AssessmentResult {
   should_attempt: boolean;
   complexity_score: number;
   reasoning: string;
@@ -16,7 +16,7 @@ interface AssessmentResult {
 // Prompt
 // ---------------------------------------------------------------------------
 
-const SYSTEM_PROMPT = `You are a complexity rater for an autonomous bug-fixing agent called Squash. Your job is to assess whether a given issue is suitable for the agent to fix on its own.
+export const ASSESSMENT_SYSTEM_PROMPT = `You are a complexity rater for an autonomous bug-fixing agent called Squash. Your job is to assess whether a given issue is suitable for the agent to fix on its own.
 
 The agent works well for:
 - Well-scoped bug fixes with clear reproduction steps
@@ -43,25 +43,26 @@ Respond with JSON only, no other text:
 Set should_attempt to false if complexity_score is 7 or higher.`;
 
 // ---------------------------------------------------------------------------
-// Public API
+// Shared assessment logic (no DB dependency)
 // ---------------------------------------------------------------------------
 
-export async function assessIssue(issueId: string): Promise<AssessmentResult> {
-  const issue = getIssue(issueId);
-  if (!issue) throw new NotFoundError("Issue", issueId);
-
+export async function assessRaw(
+  title: string,
+  body: string | null,
+  labels: string[],
+): Promise<AssessmentResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
 
   const client = new Anthropic({ apiKey });
 
   const userMessage = [
-    `**Issue title:** ${issue.title ?? "(no title)"}`,
+    `**Issue title:** ${title || "(no title)"}`,
     "",
     `**Issue body:**`,
-    issue.body ?? "(no body)",
+    body ?? "(no body)",
     "",
-    issue.labels.length ? `**Labels:** ${issue.labels.join(", ")}` : "",
+    labels.length ? `**Labels:** ${labels.join(", ")}` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -69,7 +70,7 @@ export async function assessIssue(issueId: string): Promise<AssessmentResult> {
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 1024,
-    system: SYSTEM_PROMPT,
+    system: ASSESSMENT_SYSTEM_PROMPT,
     messages: [{ role: "user", content: userMessage }],
   });
 
@@ -78,11 +79,24 @@ export async function assessIssue(issueId: string): Promise<AssessmentResult> {
     .map((block) => block.text)
     .join("");
 
-  // Strip markdown code fences if the model wraps the JSON
   const jsonStr = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/, "").trim();
-  const result: AssessmentResult = JSON.parse(jsonStr);
+  return JSON.parse(jsonStr) as AssessmentResult;
+}
 
-  // Persist to DB
+// ---------------------------------------------------------------------------
+// DB-backed assessment (used by the main pipeline)
+// ---------------------------------------------------------------------------
+
+export async function assessIssue(issueId: string): Promise<AssessmentResult> {
+  const issue = getIssue(issueId);
+  if (!issue) throw new NotFoundError("Issue", issueId);
+
+  const result = await assessRaw(
+    issue.title ?? "(no title)",
+    issue.body,
+    issue.labels,
+  );
+
   updateIssue(issueId, { complexity_score: result.complexity_score });
 
   if (!result.should_attempt) {
