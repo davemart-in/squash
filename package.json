@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/davemart-in/squash#readme",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "better-sqlite3": "^12.8.0",
     "dotenv": "^17.3.1"
   },
