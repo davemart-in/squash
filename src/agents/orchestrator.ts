@@ -96,6 +96,18 @@ export function retryIssue(issueId: string): Issue {
   return getIssue(issueId)!;
 }
 
+export function completeIssue(issueId: string): Issue {
+  const issue = getIssue(issueId);
+  if (!issue) throw new Error(`Issue not found: ${issueId}`);
+
+  updateIssue(issueId, {
+    status: "done",
+    completed_at: new Date().toISOString(),
+  });
+
+  return getIssue(issueId)!;
+}
+
 export function cancelAndDeleteIssue(issueId: string): void {
   // Abort running agent (best-effort)
   const controller = running.get(issueId);

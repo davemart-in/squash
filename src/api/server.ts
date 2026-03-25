@@ -5,7 +5,7 @@ import express from "express";
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { getIssue, getLogsForIssue, setBroadcast, type IssueStatus } from "../db/issues.js";
-import { queueIssue, getStatus, listAll, retryIssue, cancelAndDeleteIssue } from "../agents/orchestrator.js";
+import { queueIssue, getStatus, listAll, retryIssue, completeIssue, cancelAndDeleteIssue } from "../agents/orchestrator.js";
 
 // ---------------------------------------------------------------------------
 // Express app
@@ -78,6 +78,17 @@ app.get("/api/issues/:id/logs", (req, res) => {
 app.post("/api/issues/:id/retry", (req, res) => {
   try {
     const issue = retryIssue(req.params.id);
+    res.json(issue);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(400).json({ error: message });
+  }
+});
+
+// POST /api/issues/:id/complete — mark an issue as done
+app.post("/api/issues/:id/complete", (req, res) => {
+  try {
+    const issue = completeIssue(req.params.id);
     res.json(issue);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
