@@ -54,6 +54,8 @@ export async function queueIssue(url: string, context?: string): Promise<Issue> 
   const assessment = await assessIssue(id);
 
   if (assessment.should_attempt) {
+    updateIssue(id, { status: "running" });
+
     const controller = new AbortController();
     running.set(id, controller);
 
