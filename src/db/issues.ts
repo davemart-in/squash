@@ -44,6 +44,7 @@ export interface Issue {
   complexity_score: number | null;
   skip_reason: string | null;
   context: string | null;
+  repo_id: string | null;
   error_message: string | null;
   started_at: string | null;
   completed_at: string | null;
@@ -95,6 +96,7 @@ interface IssueRow {
   complexity_score: number | null;
   skip_reason: string | null;
   context: string | null;
+  repo_id: string | null;
   error_message: string | null;
   started_at: string | null;
   completed_at: string | null;
@@ -114,7 +116,7 @@ function rowToIssue(row: IssueRow): Issue {
 // ---------------------------------------------------------------------------
 
 export function createIssue(
-  data: Pick<Issue, "id" | "ref" | "source" | "url"> & { context?: string | null },
+  data: Pick<Issue, "id" | "ref" | "source" | "url"> & { context?: string | null; repo_id?: string | null },
 ): Issue {
   const db = getDb();
 
@@ -124,8 +126,8 @@ export function createIssue(
   if (existing) throw new ConflictError("Issue", data.id);
 
   db.prepare(
-    "INSERT INTO issues (id, ref, source, url, context) VALUES (?, ?, ?, ?, ?)",
-  ).run(data.id, data.ref, data.source, data.url, data.context ?? null);
+    "INSERT INTO issues (id, ref, source, url, context, repo_id) VALUES (?, ?, ?, ?, ?, ?)",
+  ).run(data.id, data.ref, data.source, data.url, data.context ?? null, data.repo_id ?? null);
 
   return getIssue(data.id)!;
 }

@@ -7,6 +7,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { getIssue, getLogsForIssue, setBroadcast, type IssueStatus } from "../db/issues.js";
 import { queueIssue, getStatus, listAll, retryIssue, completeIssue, cancelAndDeleteIssue } from "../agents/orchestrator.js";
 import { discoverFromGitHub, discoverFromLinear, discoverAndAssess } from "../agents/discoverer.js";
+import { createRepo, listRepos, findRepoByGitHub, findRepoByLinearTeam, deleteRepo } from "../db/repos.js";
 
 // ---------------------------------------------------------------------------
 // Express app
@@ -18,12 +19,12 @@ app.use(express.json());
 // POST /api/issues — queue a new issue
 app.post("/api/issues", async (req, res) => {
   try {
-    const { url, context } = req.body;
+    const { url, context, repo_id } = req.body;
     if (!url || typeof url !== "string") {
       res.status(400).json({ error: "Missing or invalid 'url' in request body" });
       return;
     }
-    const issue = await queueIssue(url, context);
+    const issue = await queueIssue(url, context, repo_id);
     res.status(201).json(issue);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -173,6 +174,101 @@ app.delete("/api/issues/:id", (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(404).json({ error: message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Repos
+// ---------------------------------------------------------------------------
+
+// GET /api/repos — list all registered repos
+app.get("/api/repos", (_req, res) => {
+  try {
+    res.json(listRepos());
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/repos/lookup — check if a repo mapping exists
+app.get("/api/repos/lookup", (req, res) => {
+  try {
+    const { owner, repo, team } = req.query as { owner?: string; repo?: string; team?: string };
+    let found = null;
+    if (owner && repo) {
+      found = findRepoByGitHub(owner, repo);
+    } else if (team) {
+      found = findRepoByLinearTeam(team);
+    } else {
+      res.status(400).json({ error: "Provide owner+repo or team query params" });
+      return;
+    }
+    if (found) {
+      res.json(found);
+    } else {
+      res.status(404).json({ error: "No repo mapping found" });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/repos — register a new repo
+app.post("/api/repos", (req, res) => {
+  try {
+    const { name, local_path, github_owner, github_repo, linear_team_key } = req.body;
+    if (!name || !local_path) {
+      res.status(400).json({ error: "name and local_path are required" });
+      return;
+    }
+    // Validate it's a git repo
+    try {
+      execSync(`git -C ${local_path} rev-parse --git-dir`, { stdio: "pipe" });
+    } catch {
+      res.status(400).json({ error: `${local_path} is not a valid git repository` });
+      return;
+    }
+    const repo = createRepo({ name, local_path, github_owner, github_repo, linear_team_key });
+    res.status(201).json(repo);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// DELETE /api/repos/:id — unregister a repo
+app.delete("/api/repos/:id", (req, res) => {
+  try {
+    deleteRepo(req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(404).json({ error: message });
+  }
+});
+
+// POST /api/repos/pick-folder — open native OS folder picker, return selected path
+app.post("/api/repos/pick-folder", async (_req, res) => {
+  try {
+    const { platform } = process;
+    let command: string;
+    if (platform === "darwin") {
+      command = `osascript -e 'POSIX path of (choose folder with prompt "Select the local repo clone")'`;
+    } else if (platform === "linux") {
+      command = `zenity --file-selection --directory --title="Select the local repo clone" 2>/dev/null`;
+    } else {
+      res.status(501).json({ error: "Folder picker not supported on this OS" });
+      return;
+    }
+    const selected = execSync(command, { encoding: "utf-8", timeout: 60000 }).trim();
+    // Remove trailing slash
+    const folder = selected.replace(/\/+$/, "");
+    res.json({ path: folder });
+  } catch {
+    // User cancelled the dialog
+    res.json({ path: null });
   }
 });
 

@@ -13,6 +13,16 @@ export function getDb(): Database.Database {
   db.pragma("foreign_keys = ON");
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS repos (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      local_path TEXT NOT NULL,
+      github_owner TEXT,
+      github_repo TEXT,
+      linear_team_key TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS issues (
       id TEXT PRIMARY KEY,
       ref TEXT NOT NULL,
@@ -35,6 +45,7 @@ export function getDb(): Database.Database {
       started_at TEXT,
       completed_at TEXT,
       elapsed_seconds INTEGER,
+      repo_id TEXT REFERENCES repos(id),
       created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -60,6 +71,9 @@ export function getDb(): Database.Database {
       created_at TEXT DEFAULT (datetime('now'))
     );
   `);
+
+  // Migration: add repo_id to existing issues tables
+  try { db.exec(`ALTER TABLE issues ADD COLUMN repo_id TEXT REFERENCES repos(id)`); } catch {}
 
   return db;
 }

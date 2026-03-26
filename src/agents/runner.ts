@@ -2,6 +2,7 @@ import { execSync } from "child_process";
 import path from "path";
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { getIssue, updateIssue, appendLog } from "../db/issues.js";
+import { getRepo } from "../db/repos.js";
 import { NotFoundError } from "../db/errors.js";
 
 // ---------------------------------------------------------------------------
@@ -120,8 +121,10 @@ export async function runAgentForIssue(
   let issue = getIssue(issueId);
   if (!issue) throw new NotFoundError("Issue", issueId);
 
-  const repoPath = process.env.REPO_PATH;
-  if (!repoPath) throw new Error("REPO_PATH is not set — cannot run agent without a target repo");
+  const repoPath = issue.repo_id
+    ? getRepo(issue.repo_id)?.local_path ?? null
+    : process.env.REPO_PATH ?? null;
+  if (!repoPath) throw new Error("No repo configured — set REPO_PATH or register a repo mapping");
 
   const startStep = resumeFromStep ?? 3;
 

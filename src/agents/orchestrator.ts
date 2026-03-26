@@ -12,6 +12,7 @@ import {
 import { fetchAndEnrichIssue } from "./fetcher.js";
 import { assessIssue } from "./assessor.js";
 import { runAgentForIssue } from "./runner.js";
+import { getRepo } from "../db/repos.js";
 
 // ---------------------------------------------------------------------------
 // Running agents
@@ -41,11 +42,11 @@ function parseIssueUrl(url: string): { source: "github" | "linear"; ref: string 
 // Public API
 // ---------------------------------------------------------------------------
 
-export async function queueIssue(url: string, context?: string): Promise<Issue> {
+export async function queueIssue(url: string, context?: string, repo_id?: string): Promise<Issue> {
   const { source, ref } = parseIssueUrl(url);
   const id = uuidv4();
 
-  const issue = createIssue({ id, ref, source, url, context: context || null });
+  const issue = createIssue({ id, ref, source, url, context: context || null, repo_id: repo_id || null });
 
   // Step 1 — Fetch
   await fetchAndEnrichIssue(id);
@@ -130,7 +131,7 @@ export function cancelAndDeleteIssue(issueId: string): void {
 
   // Clean up git worktree and branch in the target repo
   const issue = getIssue(issueId);
-  const repoPath = process.env.REPO_PATH;
+  const repoPath = (issue?.repo_id ? getRepo(issue.repo_id)?.local_path : null) ?? process.env.REPO_PATH;
   if (issue && repoPath) {
     if (issue.worktree_path) {
       try { execSync(`git -C ${repoPath} worktree remove --force ${issue.worktree_path}`, { stdio: "pipe" }); } catch {}
