@@ -30,14 +30,18 @@ function parseGitHubRepoUrl(url: string): { owner: string; repo: string } {
   return { owner: match[1], repo: match[2].replace(/\.git$/, "") };
 }
 
-interface GitHubListIssue {
+interface GitHubSearchItem {
   html_url: string;
   number: number;
   title: string;
   body: string | null;
   labels: Array<{ name: string }>;
   assignee: { login: string } | null;
-  pull_request?: unknown;
+}
+
+interface GitHubSearchResponse {
+  total_count: number;
+  items: GitHubSearchItem[];
 }
 
 export async function discoverFromGitHub(
@@ -49,8 +53,10 @@ export async function discoverFromGitHub(
 
   const { owner, repo } = parseGitHubRepoUrl(repoUrl);
 
+  // Use the Search API with is:issue to exclude pull requests server-side.
+  const q = encodeURIComponent(`repo:${owner}/${repo} is:issue is:open no:assignee`);
   const res = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/issues?state=open&assignee=none&per_page=25&page=${page}&sort=created&direction=desc`,
+    `https://api.github.com/search/issues?q=${q}&per_page=25&page=${page}&sort=created&order=desc`,
     {
       headers: {
         Authorization: `token ${token}`,
@@ -65,19 +71,17 @@ export async function discoverFromGitHub(
     throw new Error(`GitHub API returned ${res.status}: ${text}`);
   }
 
-  const data = (await res.json()) as GitHubListIssue[];
+  const data = (await res.json()) as GitHubSearchResponse;
 
-  return data
-    .filter((i) => !i.pull_request) // Exclude PRs (GitHub lists them as issues)
-    .map((i) => ({
-      url: i.html_url,
-      ref: `GH-${i.number}`,
-      source: "github" as const,
-      title: i.title,
-      body: i.body,
-      labels: i.labels.map((l) => l.name),
-      assignee: i.assignee?.login ?? null,
-    }));
+  return data.items.map((i) => ({
+    url: i.html_url,
+    ref: `GH-${i.number}`,
+    source: "github" as const,
+    title: i.title,
+    body: i.body,
+    labels: i.labels.map((l) => l.name),
+    assignee: i.assignee?.login ?? null,
+  }));
 }
 
 // ---------------------------------------------------------------------------
