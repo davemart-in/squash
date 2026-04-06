@@ -25,7 +25,7 @@ Fill in your `.env` values:
 | `ANTHROPIC_API_KEY` | Yes | API key for the assessor agent |
 | `GITHUB_TOKEN` | For GitHub issues | Personal access token with repo scope |
 | `LINEAR_API_KEY` | For Linear issues | Linear API key |
-| `REPO_PATH` | Recommended | Absolute path to the repo being fixed |
+| `REPO_PATH` | Yes | Absolute path to the repo being fixed |
 | `PORT` | No | API server port (default: 3001) |
 | `DB_PATH` | No | SQLite database path (default: squash.db) |
 | `MAX_CONCURRENT_AGENTS` | No | Max parallel agents (default: 10) |
@@ -80,7 +80,5 @@ git worktree prune
 
 ## Known limitations
 
-- **Single repo per instance.** Squash operates on one codebase at a time. All agents share the same repository.
 - **No skip override.** If the assessor rejects an issue (complexity score 7+), there's no way to force it through yet.
-- **No automatic cleanup.** Failed runs leave behind worktrees and branches that need manual removal.
 - **Draft PRs only.** The agent never opens a ready-for-review PR — you decide when to promote it.
