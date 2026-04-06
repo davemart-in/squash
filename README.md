@@ -2,6 +2,8 @@
 
 Squash is a local tool that autonomously fixes bugs. Paste a GitHub or Linear issue URL, and an AI agent takes it from there — reading the issue, assessing whether it can handle it, making the fix, and opening a draft PR for your review. Multiple issues run in parallel without interfering with each other.
 
+<img width="2394" height="1420" alt="image" src="https://github.com/user-attachments/assets/adf19021-bf64-4188-b9af-6afc9cc94029" />
+
 ## Prerequisites
 
 - **Node 20+**
