@@ -10,7 +10,15 @@ Squash is a local tool that autonomously fixes bugs. Paste a GitHub or Linear is
 - **Claude Code CLI** installed and authenticated (`claude` command available)
 - **GitHub CLI** installed and authenticated (`gh auth status` should pass)
 
-## Setup
+## Quick setup with Claude Code
+
+If you have [Claude Code](https://claude.ai/claude-code) installed, paste this prompt to have it set everything up for you:
+
+> Clone https://github.com/davemart-in/squash.git, install dependencies (including inside src/ui), then walk me through creating the .env file. I'll need help getting my ANTHROPIC_API_KEY, GITHUB_TOKEN, and LINEAR_API_KEY. Once .env is ready, start the dev server.
+
+Claude Code will clone the repo, run the installs, ask you for each API key one at a time, create the `.env` file, and start Squash. No terminal knowledge required.
+
+## Manual setup
 
 ```bash
 git clone https://github.com/davemart-in/squash.git
@@ -27,7 +35,7 @@ Fill in your `.env` values:
 | `ANTHROPIC_API_KEY` | Yes | API key for the assessor agent |
 | `GITHUB_TOKEN` | For GitHub issues | Personal access token with repo scope |
 | `LINEAR_API_KEY` | For Linear issues | Linear API key |
-| `REPO_PATH` | Yes | Absolute path to the repo being fixed |
+| `REPO_PATH` | No | Default repo path (can also be set per-repo in the UI) |
 | `PORT` | No | API server port (default: 3001) |
 | `DB_PATH` | No | SQLite database path (default: squash.db) |
 | `MAX_CONCURRENT_AGENTS` | No | Max parallel agents (default: 10) |
