@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { X, ChevronDown, ChevronRight, Check, Loader2, FolderOpen } from "lucide-react";
+import { X, ChevronDown, ChevronRight, Check, Loader2, FolderOpen, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +57,7 @@ export function FindFixableModal({ open, onClose, onQueue, onLookupRepo, onRegis
     parsed: { type: "github"; owner: string; repo: string } | { type: "linear"; team: string };
     localPath: string;
     error: string | null;
+    cloning: boolean;
   } | null>(null);
 
   if (!open) return null;
@@ -78,7 +79,7 @@ export function FindFixableModal({ open, onClose, onQueue, onLookupRepo, onRegis
       : { team: parsed.team };
     const existing = await onLookupRepo(lookupParams);
     if (existing) return existing.id;
-    setRepoPrompt({ parsed, localPath: "", error: null });
+    setRepoPrompt({ parsed, localPath: "", error: null, cloning: false });
     return "prompt";
   };
 
@@ -210,13 +211,13 @@ export function FindFixableModal({ open, onClose, onQueue, onLookupRepo, onRegis
           )}
           {repoPrompt && (
             <div className="mt-3 p-3 rounded-md border border-amber-200 bg-amber-50">
-              <div className="text-xs text-amber-800 mb-1.5">
+              <div className="text-xs text-zinc-600 mb-1.5">
                 {repoPrompt.parsed.type === "github" ? (
                   <>
                     <span className="font-medium">
                       Squash needs a local clone of {repoPrompt.parsed.owner}/{repoPrompt.parsed.repo}
                     </span>
-                    {" "}to create branches and open PRs. Where is it on your machine?
+                    {" "}to create branches and open PRs.
                   </>
                 ) : (
                   <>
@@ -227,34 +228,73 @@ export function FindFixableModal({ open, onClose, onQueue, onLookupRepo, onRegis
                   </>
                 )}
               </div>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="/Users/…/repo"
-                  value={repoPrompt.localPath}
-                  onChange={(e) => setRepoPrompt({ ...repoPrompt, localPath: e.target.value, error: null })}
-                  onKeyDown={(e) => e.key === "Enter" && handleRepoPromptSubmit()}
-                  className="text-sm h-7 flex-1"
-                  autoFocus
-                />
+              {repoPrompt.parsed.type === "github" && (
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="xs"
-                  title="Browse"
+                  className="w-full mb-2"
+                  disabled={repoPrompt.cloning}
                   onClick={async () => {
-                    const res = await fetch("/api/repos/pick-folder", { method: "POST" });
-                    const { path } = await res.json();
-                    if (path) setRepoPrompt({ ...repoPrompt, localPath: path, error: null });
+                    if (repoPrompt.parsed.type !== "github") return;
+                    const { owner, repo } = repoPrompt.parsed;
+                    setRepoPrompt({ ...repoPrompt, cloning: true, error: null });
+                    try {
+                      const res = await fetch("/api/repos/clone", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ owner, repo }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data.error);
+                      const repoData = { name: `${owner}/${repo}`, local_path: data.path, github_owner: owner, github_repo: repo };
+                      const registered = await onRegisterRepo(repoData);
+                      setRepoPrompt(null);
+                      await doScan(registered.id);
+                    } catch (err) {
+                      setRepoPrompt({ ...repoPrompt, cloning: false, error: err instanceof Error ? err.message : String(err) });
+                    }
                   }}
                 >
-                  <FolderOpen className="w-3.5 h-3.5" />
+                  {repoPrompt.cloning ? (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> Cloning…</>
+                  ) : (
+                    <><Download className="w-3.5 h-3.5 mr-1.5" /> Clone it for me</>
+                  )}
                 </Button>
-                <Button variant="outline" size="xs" onClick={handleRepoPromptSubmit}>
-                  Save & Scan
-                </Button>
-                <Button variant="ghost" size="xs" onClick={() => setRepoPrompt(null)}>
-                  Cancel
-                </Button>
-              </div>
+              )}
+              {repoPrompt.parsed.type === "github" && !repoPrompt.cloning && (
+                <div className="text-xs text-zinc-400 mb-1.5">or point to an existing clone</div>
+              )}
+              {!repoPrompt.cloning && (
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="/Users/…/repo"
+                    value={repoPrompt.localPath}
+                    onChange={(e) => setRepoPrompt({ ...repoPrompt, localPath: e.target.value, error: null })}
+                    onKeyDown={(e) => e.key === "Enter" && handleRepoPromptSubmit()}
+                    className="text-sm h-7 flex-1"
+                    autoFocus={repoPrompt.parsed.type !== "github"}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    title="Browse"
+                    onClick={async () => {
+                      const res = await fetch("/api/repos/pick-folder", { method: "POST" });
+                      const { path } = await res.json();
+                      if (path) setRepoPrompt({ ...repoPrompt, localPath: path, error: null });
+                    }}
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button variant="outline" size="xs" onClick={handleRepoPromptSubmit}>
+                    Save & Scan
+                  </Button>
+                  <Button variant="ghost" size="xs" onClick={() => setRepoPrompt(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              )}
               {repoPrompt.error && (
                 <div className="text-xs text-red-500 mt-1">{repoPrompt.error}</div>
               )}

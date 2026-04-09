@@ -1,3 +1,5 @@
+import os from "os";
+import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
 import { fileURLToPath } from "url";
@@ -246,6 +248,46 @@ app.delete("/api/repos/:id", (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(404).json({ error: message });
+  }
+});
+
+// POST /api/repos/clone — clone a GitHub repo locally so the user doesn't need git
+app.post("/api/repos/clone", async (req, res) => {
+  try {
+    const { owner, repo } = req.body;
+    if (!owner || !repo) {
+      res.status(400).json({ error: "owner and repo are required" });
+      return;
+    }
+    const cloneDir = path.join(os.homedir(), "squash-repos", owner, repo);
+
+    // If already cloned, just return the path
+    try {
+      execSync(`git -C "${cloneDir}" rev-parse --git-dir`, { stdio: "pipe" });
+      res.json({ path: cloneDir });
+      return;
+    } catch {
+      // Not cloned yet — continue
+    }
+
+    // Ensure parent directory exists
+    fs.mkdirSync(path.dirname(cloneDir), { recursive: true });
+
+    const cloneUrl = `https://github.com/${owner}/${repo}.git`;
+    execSync(`git clone "${cloneUrl}" "${cloneDir}"`, {
+      stdio: "pipe",
+      timeout: 300000, // 5 min timeout for large repos
+    });
+
+    res.json({ path: cloneDir });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const isNotFound = message.includes("Repository not found") || message.includes("not exist");
+    res.status(isNotFound ? 404 : 500).json({
+      error: isNotFound
+        ? `Repository ${req.body.owner}/${req.body.repo} not found or not accessible`
+        : `Clone failed: ${message}`,
+    });
   }
 });
 
