@@ -14,7 +14,7 @@ Squash is a local tool that autonomously fixes bugs. Paste a GitHub or Linear is
 
 If you have [Claude Code](https://claude.ai/claude-code) installed, paste this prompt to have it set everything up for you:
 
-> Clone https://github.com/davemart-in/squash.git, install dependencies (including inside src/ui), then walk me through creating the .env file. I'll need help getting my ANTHROPIC_API_KEY, GITHUB_TOKEN, and LINEAR_API_KEY. Once .env is ready, start the dev server.
+> Clone https://github.com/davemart-in/squash.git, install dependencies (including inside src/ui), then walk me through creating the .env file. I'll need help getting my ANTHROPIC_API_KEY, GITHUB_TOKEN, and LINEAR_API_KEY. Skip REPO_PATH — leave it blank, the app handles repo setup through the UI. Once .env is ready, start the dev server.
 
 Claude Code will clone the repo, run the installs, ask you for each API key one at a time, create the `.env` file, and start Squash. No terminal knowledge required.
 
